@@ -377,8 +377,14 @@ def find_possible_moves(old_img, new_img, are_we_white, board):
         os._exit(1)
     valid_moves = []
     for move in moves:
-        if chess.Move.from_uci(move + 'q') in board.legal_moves:
-            return [move + 'q']
+        # Check all promotion variants first; prefer queen by order
+        for promo in ['q', 'n', 'r', 'b']:
+            try:
+                if chess.Move.from_uci(move + promo) in board.legal_moves:
+                    return [move + promo]
+            except Exception:
+                pass
+        # Non-promotion move
         if chess.Move.from_uci(move) in board.legal_moves:
             valid_moves.append(move)
     if len(valid_moves) > 1:
@@ -459,10 +465,11 @@ def board_changed(old, new):
 
 
 def play_move(move, are_we_white, board_cordinate, bit_board, old_img):
-    promotion = False
-    if move[-1] == 'q':
-        print('promoting to queen ' + move)
-        promotion = True
+    promotion_piece = None
+    if len(move) == 5 and move[-1] in ('q', 'r', 'b', 'n'):
+        piece_names = {'q': 'queen', 'r': 'rook', 'b': 'bishop', 'n': 'knight'}
+        promotion_piece = move[-1]
+        print(f"promoting to {piece_names[promotion_piece]} {move}")
     start, end = move[:2], move[2:4]
     # r1, c1 = square_name_to_row_column(start, are_we_white)
     # r2, c2 = square_name_to_row_column(end, are_we_white)
@@ -489,31 +496,12 @@ def play_move(move, are_we_white, board_cordinate, bit_board, old_img):
     # dist = np.sqrt((e1-s1)**2 + (e2-s1)**2)
     # time.sleep((dist/30)*0.03)
     # pyautogui.dragTo(e1,e2, 0.2)
-    if promotion:
-        # pyautogui.mouseUp()
-        time.sleep(0.01)
-        pyautogui.click(e1, e2, clicks=3, interval=0.02)
-        c, r = old_img.shape
-        r = int(r/16)
-        c = int(c/16)
-
-        # change the co-ordinate of source and destination sqaure accordingly
-        e1 -= board_cordinate[0]
-        e2 -= board_cordinate[1]
-        s1 -= board_cordinate[0]
-        s2 -= board_cordinate[1]
-
-        old_img[e2 - r:e2 + r, e1 - c: e1 +
-                c] = old_img[s2 - r:s2 + r, s1 - c: s1 + c]
-        if (98 - ord(start[0]) + int(start[1])) & 1:
-            old_img[s2 - r:s2 + r, s1 - c: s1 + c] = 230
-        else:
-            old_img[s2 - r:s2 + r, s1 - c: s1 + c] = 90
-        # increase this time to get more time to promote to queen
-        print('Time to choose queen and press "q" after done..... waiting....... ')
-        keyboard.wait('q')
-        print('Game is being continued........:)')
-        return old_img
+    if promotion_piece is not None:
+        # small delay to allow the promotion dialog to appear
+        time.sleep(0.05)
+        # press the hotkey matching the promotion piece
+        pyautogui.press(promotion_piece)
+        time.sleep(0.05)
     # return np.array(sct.grab(board_img))
     try:
         img = dshot.screenshot(region=board_cordinate).view()
@@ -768,11 +756,10 @@ def play(board, engine, thread, hash, depth, time_control, play_by_depth, online
                     bit_board[r1, c1] = 0
                     bit_board[r2, c2] = 1
                     m = chess.Move.from_uci(move)
-                    if m.promotion != None:
-                        print('opponent promoting to queen.....')
-                        board.push_san(board.san(m))
-                    else:
-                        board.push_san(board.san(m))
+                    if m.promotion is not None:
+                        pname = {chess.QUEEN: 'queen', chess.ROOK: 'rook', chess.BISHOP: 'bishop', chess.KNIGHT: 'knight'}.get(m.promotion, 'unknown')
+                        print(f'opponent promoting to {pname}.....')
+                    board.push_san(board.san(m))
                     print_board(board, are_we_white)
                     #print_bit_board(bit_board, are_we_white)
                     our_turn = True
