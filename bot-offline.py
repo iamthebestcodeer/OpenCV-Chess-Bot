@@ -15,6 +15,7 @@ import subprocess
 from datetime import datetime
 import argparse
 from typing import Optional, Tuple
+import shutil
 
 dshot = d3dshot.create(capture_output="numpy")
 
@@ -885,10 +886,12 @@ if __name__ == '__main__':
     ap.add_argument("--timing-mode", choices=["delay", "engine", "both"], help="Apply per-move timing: delay (sleep before move), engine (limit engine movetime), both (limit engine and ensure visible delay)")
     ap.add_argument("--timing-min", type=float, help="Minimum seconds per move (inclusive) for timing window")
     ap.add_argument("--timing-max", type=float, help="Maximum seconds per move (inclusive) for timing window")
+    ap.add_argument("--engine-path", type=str, help="Path to UCI engine executable (e.g., stockfish)")
     args, unknown = ap.parse_known_args()
 
+    # Engine path will be resolved later based on CLI/defaults
     # Use explicit Stockfish path provided by user
-    engine = chess.engine.SimpleEngine.popen_uci(r'C:\Users\shuey\Downloads\stockfish\stockfish-windows-x86-64-avx2.exe')
+    # engine = chess.engine.SimpleEngine.popen_uci(r'C:\Users\shuey\Downloads\stockfish\stockfish-windows-x86-64-avx2.exe')
 
     parser = configparser.ConfigParser()
     parser.read('default.ini')
@@ -938,6 +941,18 @@ if __name__ == '__main__':
             os._exit(1)
         timing_window = (float(args.timing_min), float(args.timing_max))
         print(f'Per-move timing enabled: mode={timing_mode}, window=[{timing_window[0]:.3f}, {timing_window[1]:.3f}]s')
+    
+    # Resolve engine path and start engine
+    engine_path = args.engine_path or shutil.which("stockfish")
+    if not engine_path:
+        print("Error: --engine-path not provided and 'stockfish' not found in PATH")
+        os._exit(1)
+    try:
+        engine = chess.engine.SimpleEngine.popen_uci(engine_path)
+        print(f"Started engine: {engine_path}")
+    except Exception as e:
+        print(f"Failed to start engine at {engine_path}: {e}")
+        os._exit(1)
     
     # Note: when play_by_depth_bool is False and timing_mode is None, engine will use chess.engine.Limit(time=time_control)
     play(chess.Board(), engine, thread, ram, depth, time_control, play_by_depth_bool, timing_mode=timing_mode, timing_window=timing_window)
